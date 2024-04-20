@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Capture</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+        #video-container {
+            margin-bottom: 20px;
+        }
+        #video-feed {
+            border: 2px solid #333;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+        #capture-button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        #capture-button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="video-container">
+        <img id="video-feed" src="/video_feed" width="640" height="480">
+    </div>
+    <button id="capture-button" onclick="toggleCapture()">Start Capture</button>
+
+    <script>
+        var capturing = false;
+
+        function toggleCapture() {
+            capturing = !capturing;
+
+            var button = document.getElementById("capture-button");
+            if (capturing) {
+                button.innerText = "Stop Capture";
+            } else {
+                button.innerText = "Start Capture";
+            }
+
+            fetch('/toggle_capture', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    capturing: capturing,
+                }),
+            })
+            .then(response => response.json())
+            .then(data => console.log(data))
+            .catch(error => console.error('Error:', error));
+        }
+    </script>
+</body>
+</html>
+
+
+<video autoplay></video>
+
