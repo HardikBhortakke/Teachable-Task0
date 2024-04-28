@@ -81,15 +81,5 @@ def toggle_capture():
         current_class = current_class + 1
         return jsonify({"message": f"Switched to class {current_class}."})
 
-@app.route('/exit', methods=['GET'])
-def exit_app():
-    release_camera()
-    func = request.environ.get('werkzeug.server.shutdown')
-    if func is None:
-        raise RuntimeError('Not running with the Werkzeug Server')
-    else:
-        func()
-    return 'Server shutting down...'
-
 if __name__ == '__main__':
     app.run(debug=True)
