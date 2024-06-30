@@ -1,145 +1,177 @@
 import tensorflow as tf
 from tensorflow import keras
+from keras.layers import Flatten, Input, Activation, GlobalMaxPooling2D
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Flatten
+from tensorflow.keras.layers import Dense, Convolution2D, GlobalAveragePooling2D, MaxPooling2D, Add, concatenate,Dropout
 from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.models import load_model, save_model
+from keras.utils import get_file
+from keras_applications.imagenet_utils import _obtain_input_shape
+from keras import backend as K
 import os
 import cv2
 import numpy as np
 
-# Function to load images and labels from a folder
-def load_images_from_folder(folder_path):
-    images = []
-    labels = []
-    for label, class_folder in enumerate(os.listdir(folder_path)):
-        class_folder_path = os.path.join(folder_path, class_folder)
-        if os.path.isdir(class_folder_path):
-            for filename in os.listdir(class_folder_path):
-                img_path = os.path.join(class_folder_path, filename)
-                # Load image
-                img = cv2.imread(img_path)
-                if img is not None:
-                    images.append(img)
-                    labels.append(label)
-    return images, labels
+sq1x1 = "squeeze1x1"
+exp1x1 = "expand1x1"
+exp3x3 = "expand3x3"
+relu = "relu_"
 
-# Function to preprocess images
-def preprocess_images(images, size=(64, 64)):
-    processed_images = []
-    for img in images:
-        resized_img = cv2.resize(img, size)  # Resize images to a fixed size
-        processed_images.append(resized_img)
-    return processed_images
+WEIGHTS_PATH = "https://github.com/rcmalli/keras-squeezenet/releases/download/v1.0/squeezenet_weights_tf_dim_ordering_tf_kernels.h5"
+WEIGHTS_PATH_NO_TOP = "https://github.com/rcmalli/keras-squeezenet/releases/download/v1.0/squeezenet_weights_tf_dim_ordering_tf_kernels_notop.h5"
 
-# Function to save dataset
-def save_dataset(images, labels, output_file):
-    np.savez(output_file, images=images, labels=labels)
+# Modular function for Fire Node
 
-# Main function to iterate over folders, load, preprocess, and save dataset
-def generate_dataset(folder_path, output_file):
-    dataset_images = []
-    dataset_labels = []
-    for class_folder in os.listdir(folder_path):
-        class_folder_path = os.path.join(folder_path, class_folder)
-        if os.path.isdir(class_folder_path):
-            print(f"Processing images from folder: {class_folder}")
-            images, labels = load_images_from_folder(class_folder_path)
-            if len(images) == 0:
-                print(f"No images found in folder: {class_folder}")
-            else:
-                processed_images = preprocess_images(images)
-                dataset_images.extend(processed_images)
-                dataset_labels.extend(labels)
+def fire_module(x, fire_id, squeeze=16, expand=64):
+    s_id = 'fire' + str(fire_id) + '_'
 
-    # Convert lists to numpy arrays
-    dataset_images = np.array(dataset_images)
-    dataset_labels = np.array(dataset_labels)
+    if K.image_data_format() == 'channels_first':
+        channel_axis = 1
+    else:
+        channel_axis = 3
 
-    # Shuffle dataset
-    indices = np.arange(len(dataset_images))
-    np.random.shuffle(indices)
-    dataset_images = dataset_images[indices]
-    dataset_labels = dataset_labels[indices]
+    x = Convolution2D(squeeze, (1, 1), padding='valid', name=s_id + sq1x1)(x)
+    x = Activation('relu', name=s_id + relu + sq1x1)(x)
 
-    # Save dataset
-    save_dataset(dataset_images, dataset_labels, output_file)
+    left = Convolution2D(expand, (1, 1), padding='valid', name=s_id + exp1x1)(x)
+    left = Activation('relu', name=s_id + relu + exp1x1)(left)
 
-def load_dataset(dataset_file):
-    data = np.load(dataset_file)
-    images = data['data']
-    labels = data['labels']
-    return images, labels
+    right = Convolution2D(expand, (3, 3), padding='same', name=s_id + exp3x3)(x)
+    right = Activation('relu', name=s_id + relu + exp3x3)(right)
 
-def train_set(images, labels):
-    X = np.array(images)
-    #print(X.shape)
-    X_flatten = X.reshape(X.shape[0], -1).T
-    train_x = X_flatten/255
-    #print(train_x.shape,train_x.dtype)
-    train_y = np.array(labels)
-    train_y = train_y.reshape(train_y.shape[0],1)
-    train_y = train_y.astype(np.float32)
-    #print(train_y.shape,train_y.dtype)
-    #print(train_y)
-    return train_x, train_y
+    x = concatenate([left, right], axis=channel_axis, name=s_id + 'concat')
+    return x
 
-def train_model(train_x, train_y):
-    tf.random.set_seed(1234)  # applied to achieve consistent results
+
+# Original SqueezeNet from paper.
+
+def SqueezeNet(include_top=True, weights='imagenet',
+               input_tensor=None, input_shape=None,
+               pooling=None,
+               classes=1000):
+    """Instantiates the SqueezeNet architecture.
+    """
+
+    if weights not in {'imagenet', None}:
+        raise ValueError('The `weights` argument should be either '
+                         '`None` (random initialization) or `imagenet` '
+                         '(pre-training on ImageNet).')
+
+    if weights == 'imagenet' and classes != 1000:
+        raise ValueError('If using `weights` as imagenet with `include_top`'
+                         ' as true, `classes` should be 1000')
+
+
+    input_shape = _obtain_input_shape(input_shape,
+                                      default_size=227,
+                                      min_size=48,
+                                      data_format=K.image_data_format(),
+                                      require_flatten=include_top)
+
+    if input_tensor is None:
+        img_input = Input(shape=input_shape)
+    else:
+        if not K.is_keras_tensor(input_tensor):
+            img_input = Input(tensor=input_tensor, shape=input_shape)
+        else:
+            img_input = input_tensor
+
+
+    x = Convolution2D(64, (3, 3), strides=(2, 2), padding='valid', name='conv1')(img_input)
+    x = Activation('relu', name='relu_conv1')(x)
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), name='pool1')(x)
+
+    x = fire_module(x, fire_id=2, squeeze=16, expand=64)
+    x = fire_module(x, fire_id=3, squeeze=16, expand=64)
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), name='pool3')(x)
+
+    x = fire_module(x, fire_id=4, squeeze=32, expand=128)
+    x = fire_module(x, fire_id=5, squeeze=32, expand=128)
+    x = MaxPooling2D(pool_size=(3, 3), strides=(2, 2), name='pool5')(x)
+
+    x = fire_module(x, fire_id=6, squeeze=48, expand=192)
+    x = fire_module(x, fire_id=7, squeeze=48, expand=192)
+    x = fire_module(x, fire_id=8, squeeze=64, expand=256)
+    x = fire_module(x, fire_id=9, squeeze=64, expand=256)
+
+    if include_top:
+        # It's not obvious where to cut the network...
+        # Could do the 8th or 9th layer... some work recommends cutting earlier layers.
+
+        x = Dropout(0.5, name='drop9')(x)
+
+        x = Convolution2D(classes, (1, 1), padding='valid', name='conv10')(x)
+        x = Activation('relu', name='relu_conv10')(x)
+        x = GlobalAveragePooling2D()(x)
+        x = Activation('softmax', name='loss')(x)
+    else:
+        if pooling == 'avg':
+            x = GlobalAveragePooling2D()(x)
+        elif pooling=='max':
+            x = GlobalMaxPooling2D()(x)
+        elif pooling==None:
+            pass
+        else:
+            raise ValueError("Unknown argument for 'pooling'=" + pooling)
+
+    inputs = img_input
+
+    model = Model(inputs, x, name='squeezenet')
+
+    # load weights
+    if weights == 'imagenet':
+        if include_top:
+            weights_path = get_file('squeezenet_weights_tf_dim_ordering_tf_kernels.h5',
+                                    WEIGHTS_PATH,
+                                    cache_subdir='models')
+        else:
+            weights_path = get_file('squeezenet_weights_tf_dim_ordering_tf_kernels_notop.h5',
+                                    WEIGHTS_PATH_NO_TOP,
+                                    cache_subdir='models')
+
+        model.load_weights(weights_path)
+
+    return model
+
+def custom_mod0(input_shape = (12288,), num_classes = 2):
     model = Sequential(
         [
-            tf.keras.Input(shape=(12288,)),
-            Dense(64, activation='LeakyReLU', name = 'layer1'),
-            Dense(3, activation='LeakyReLU', name = 'layer2'),
-            Dense(1, activation='sigmoid', name = 'layer3')
+            tf.keras.Input(shape = input_shape ),
+            Dense(64, activation='relu', name='layer1'), 
+            Dense(16, activation='relu', name='layer2'), 
+            Dense(num_classes, activation='softmax', name='layer3')
         ]
     )
-    model.compile(
-    loss = tf.keras.losses.BinaryCrossentropy(),
-    optimizer = tf.keras.optimizers.Adam(learning_rate=0.01),
+    return model
+
+def custom_mod1(input_shape = (12288,), num_classes = 2):
+    model = Sequential(
+        [
+            tf.keras.Input(shape = input_shape ),
+            Dense(4096, activation='relu', name='layer1'),
+            Dense(256, activation='relu', name='layer2'),
+            Dense(64, activation='relu', name='layer3'),
+            Dense(16, activation='relu', name='layer4'),
+            Dense(num_classes, activation='softmax', name='layer5')
+        ]
     )
+    return model
 
-    model.fit(
-        train_x.T,train_y,
-        epochs=50,
-    )
-    model.save('model.h5')  # Save the entire model to a single .h5 file
+def squeezenet_model(input_shape = (299, 299, 3), num_classes = 2):
+    base_model = SqueezeNet(weights = 'imagenet', include_top = False, input_shape = input_shape )
 
-def predict(model_path, test_x, threshold):
-    model = load_model(model_path)
-    predictions = model.predict(test_x.T)
-    for i in range(predictions.shape[0]):
-        predictions[i] = 1 if predictions[i] > threshold else 0
-    #print(predictions)
+    # Add new layers
+    x = base_model.output
+    x = Flatten()(x)
+    x = Dense(100, activation='relu')(x)
+    predictions = Dense(num_classes, activation='softmax', kernel_initializer='random_uniform')(x)
 
-    return predictions
+    # Build model
+    model = Model(inputs=base_model.input, outputs=predictions)
 
-def cam_ip(model_path):
-    cap = cv2.VideoCapture(0)  # Use 0 for webcam, or provide the path to a video file
-    model = load_model(model_path)
-    while True:
-        # Read a frame from the video feed
-        ret, frame = cap.read()
-        if not ret:
-            break
+    # Freeze pre-trained layers
+    for layer in base_model.layers:
+        layer.trainable = False
 
-        # Preprocess the frame
-        processed_frame = preprocess_images([frame])
-
-        # Make predictions
-        predictions = model.predict(processed_frame)
-
-        # Optionally, display predictions on the frame
-        # For example, you can draw bounding boxes or labels based on predictions
-
-        # Display the frame
-        cv2.imshow('Live Feed', frame)
-
-        # Check for user interrupt
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    # Release video capture object
-    cap.release()
-    cv2.destroyAllWindows()
+    return model

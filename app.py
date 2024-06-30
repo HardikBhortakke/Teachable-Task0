@@ -15,7 +15,6 @@ SAVE_PATH = "captured_frames"
 # Initialize variables
 capturing = False
 current_class = 0
-start_time = None
 cap = None
 
 def initialize_camera():
@@ -39,14 +38,25 @@ def save_frame(frame, class_idx):
     save_folder = os.path.join(SAVE_PATH, f"class{class_idx}")
     cv2.imwrite(os.path.join(save_folder, filename), frame)
 
-def gen_frames():
-    global capturing, current_class, start_time, cap
+# def save_frame1(frame, class_idx):
+#     filename = f"1.jpg"
+#     save_folder = os.path.join("static", f"Image")
+#     cv2.imwrite(os.path.join(save_folder, filename), frame)
 
+def predict(data):
+    # Perform prediction based on the input data
+    # For example, if you receive an image, use a trained model to predict the class
+    # Here, I'm assuming the prediction is based on some integer data
+    # You should replace this with your actual prediction logic
+    # For demonstration, I'm returning a hardcoded prediction
+    return 0
+
+def gen_frames():
+    global capturing, current_class, cap
+    initialize_camera()
     while True:
-        if capturing and (datetime.now() - start_time).total_seconds() < 50:
-            if cap is None or not cap.isOpened():
-                initialize_camera()
-            success, frame = cap.read()
+        success, frame = cap.read()
+        if capturing:
             if success:
                 ret, buffer = cv2.imencode('.jpg', frame)
                 if ret:
@@ -55,8 +65,10 @@ def gen_frames():
                            b'Content-Type: image/jpeg\r\n\r\n' + jpg_as_text.encode('utf-8') + b'\r\n')
                     save_frame(frame, current_class)
         else:
+            print(frame)
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + b'\r\n')
+            # save_frame1(frame, current_class)
 
 @app.route('/')
 def index():
@@ -66,9 +78,19 @@ def index():
 def video_feed():
     return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@app.route('/predict', methods=['POST'])
+def get_prediction():
+    # Assuming you receive data needed for prediction in the request body
+    data = request.json
+    # Perform prediction
+    prediction = predict(data)
+    # Return the prediction as a JSON response
+    return jsonify({'prediction': prediction})
+
+
 @app.route('/toggle_capture', methods=['POST'])
 def toggle_capture():
-    global capturing, current_class, start_time
+    global capturing, current_class
 
     capturing = not capturing
 
@@ -77,7 +99,7 @@ def toggle_capture():
         create_class_folder(current_class)
         return jsonify({"message": "Capture started."})
     else:
-        release_camera()
+        #release_camera()
         current_class = current_class + 1
         return jsonify({"message": f"Switched to class {current_class}."})
 

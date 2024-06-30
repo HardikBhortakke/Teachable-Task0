@@ -23,29 +23,44 @@
             border-radius: 5px;
             box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
         }
-        #capture-button {
+        .button {
             padding: 10px 20px;
             font-size: 16px;
-            background-color: #007bff;
-            color: #fff;
-            border: none;
+            margin: 5px;
             border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.3s ease;
         }
-        #capture-button:hover {
-            background-color: #0056b3;
+        #capture-button {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+        }
+        #predict-button {
+            background-color: #28a745;
+            color: #fff;
+            border: none;
+        }
+        #prediction-text {
+            font-size: 16px;
+            margin-top: 10px;
+            display: none; /* Initially hidden */
         }
     </style>
 </head>
 <body>
     <div id="video-container">
-        <img id="video-feed" src="/video_feed" width="640" height="480">
+        <img src="{{url_for('/video_feed')}}" width="640" height="480"/>
+        <img src="{{url_for('static', filename='/Image/1.jpg')}}" width="640" height="480"/>
     </div>
-    <button id="capture-button" onclick="toggleCapture()">Start Capture</button>
+    <button id="capture-button" class="button" onclick="toggleCapture()">Start Capture</button>
+    <button id="predict-button" class="button" onclick="togglePredict()">Predict</button>
+    <div id="prediction-text"></div>
 
     <script>
+
         var capturing = false;
+        var predicting = false;
 
         function toggleCapture() {
             capturing = !capturing;
@@ -70,10 +85,36 @@
             .then(data => console.log(data))
             .catch(error => console.error('Error:', error));
         }
+
+        function togglePredict() {
+            predicting = !predicting;
+
+            var button = document.getElementById("predict-button");
+            var predictionText = document.getElementById("prediction-text");
+            if (predicting) {
+                button.innerText = "Stop Prediction";
+                predictionText.style.display = "block"; // Show the prediction text
+                // Fetch the predicted class from the server and update the prediction text
+                fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        // Add any data needed for prediction here
+                    }),
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Display the predicted class
+                    predictionText.innerText = "Predicted class: " + data.prediction;
+                })
+                .catch(error => console.error('Error:', error));
+            } else {
+                button.innerText = "Predict";
+                predictionText.style.display = "none"; // Hide the prediction text
+            }
+        }
     </script>
 </body>
 </html>
-
-
-<video autoplay></video>
-
