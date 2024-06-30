@@ -46,3 +46,8 @@ The Tkinter application is complete and can be used as per required.
 
 ## Mentors
 - Mr. Bhavesh Sirvi
+
+## Referances
+- [Teachable Machines](https://github.com/googlecreativelab/teachablemachine-community)
+- [Squeezenet Implementation](https://github.com/forresti/SqueezeNet)
+- [Squeezenet paper](https://arxiv.org/pdf/1602.07360.pdf)
